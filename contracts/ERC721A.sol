@@ -585,13 +585,13 @@ contract ERC721A is IERC721A {
             // - `burned` to `false`.
             // - `nextInitialized` to `true`.
 
-            uint64 _timestamp;
+            uint64 _timestamp = uint64(prevOwnershipPacked >> _BITPOS_START_TIMESTAMP);
             bool update = _updateTimestampOnTransfer();
 
             assembly {
-                switch update
-                case 0 { _timestamp := shr(prevOwnershipPacked, _BITPOS_START_TIMESTAMP)  }
-                case 1 { _timestamp := timestamp() }
+                if update {
+                    _timestamp := timestamp()
+                }
             }
 
             _packedOwnerships[tokenId] = _packOwnershipData(
