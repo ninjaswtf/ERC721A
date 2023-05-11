@@ -400,12 +400,12 @@ contract ERC721A is IERC721A {
     /**
      * @dev Packs ownership data into a single uint256.
      */
-    function _packOwnershipData(address owner, uint256 flags) private view returns (uint256 result) {
+    function _packOwnershipData(address owner, uint64 timeStamp, uint256 flags) private pure returns (uint256 result) {
         assembly {
             // Mask `owner` to the lower 160 bits, in case the upper bits somehow aren't clean.
             owner := and(owner, _BITMASK_ADDRESS)
             // `owner | (block.timestamp << _BITPOS_START_TIMESTAMP) | flags`.
-            result := or(owner, or(shl(_BITPOS_START_TIMESTAMP, timestamp()), flags))
+            result := or(owner, or(shl(_BITPOS_START_TIMESTAMP, timeStamp), flags))
         }
     }
 
@@ -577,13 +577,25 @@ contract ERC721A is IERC721A {
             --_packedAddressData[from]; // Updates: `balance -= 1`.
             ++_packedAddressData[to]; // Updates: `balance += 1`.
 
+
+               
             // Updates:
             // - `address` to the next owner.
             // - `startTimestamp` to the timestamp of transfering.
             // - `burned` to `false`.
             // - `nextInitialized` to `true`.
+
+            uint64 _timestamp;
+            bool update = _updateTimestampOnTransfer();
+
+            assembly {
+                switch update
+                case 0 { _timestamp := shr(prevOwnershipPacked, _BITPOS_START_TIMESTAMP)  }
+                case 1 { _timestamp := timestamp() }
+            }
+
             _packedOwnerships[tokenId] = _packOwnershipData(
-                to,
+                to, _timestamp, 
                 _BITMASK_NEXT_INITIALIZED | _nextExtraData(from, to, prevOwnershipPacked)
             );
 
@@ -734,6 +746,16 @@ contract ERC721A is IERC721A {
         }
     }
 
+    /**
+     * @dev Flag that specifies whether an ownership timestamp should be updated every transfer
+     * 
+     * Setting this to false effectively stores the mint time of the token.
+     */
+    function _updateTimestampOnTransfer() internal virtual returns(bool) {
+        return true;
+    }
+
+
     // =============================================================
     //                        MINT OPERATIONS
     // =============================================================
@@ -763,8 +785,11 @@ contract ERC721A is IERC721A {
             // - `startTimestamp` to the timestamp of minting.
             // - `burned` to `false`.
             // - `nextInitialized` to `quantity == 1`.
+
+            uint64 _timestamp;
+            assembly { _timestamp := timestamp() }
             _packedOwnerships[startTokenId] = _packOwnershipData(
-                to,
+                to, _timestamp,
                 _nextInitializedFlag(quantity) | _nextExtraData(address(0), to, 0)
             );
 
@@ -842,13 +867,17 @@ contract ERC721A is IERC721A {
             // We can directly add to the `balance` and `numberMinted`.
             _packedAddressData[to] += quantity * ((1 << _BITPOS_NUMBER_MINTED) | 1);
 
+
+
             // Updates:
             // - `address` to the owner.
             // - `startTimestamp` to the timestamp of minting.
             // - `burned` to `false`.
             // - `nextInitialized` to `quantity == 1`.
+            uint64 _timestamp;
+            assembly { _timestamp := timestamp() }
             _packedOwnerships[startTokenId] = _packOwnershipData(
-                to,
+                to, _timestamp,
                 _nextInitializedFlag(quantity) | _nextExtraData(address(0), to, 0)
             );
 
@@ -1002,8 +1031,12 @@ contract ERC721A is IERC721A {
             // - `startTimestamp` to the timestamp of burning.
             // - `burned` to `true`.
             // - `nextInitialized` to `true`.
+
+            uint64 _timestamp;
+            assembly { _timestamp := timestamp() }
+
             _packedOwnerships[tokenId] = _packOwnershipData(
-                from,
+                from, _timestamp,
                 (_BITMASK_BURNED | _BITMASK_NEXT_INITIALIZED) | _nextExtraData(from, address(0), prevOwnershipPacked)
             );
 
